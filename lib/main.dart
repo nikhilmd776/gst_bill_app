@@ -74,18 +74,12 @@ class _BillScreenState extends State<BillScreen> {
   double get totalSGST => totalCGST;
   double get grandTotal => subtotal + totalCGST + totalSGST;
 
-  // CUSTOM "IN WORDS" FUNCTION — NO PACKAGE NEEDED
+  // CUSTOM "IN WORDS" FUNCTION (NO PACKAGE)
   String numberToWords(int number) {
     if (number == 0) return 'Zero';
 
-    final List<String> ones = [
-      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-      'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-      'Seventeen', 'Eighteen', 'Nineteen'
-    ];
-    final List<String> tens = [
-      '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'
-    ];
+    final List<String> ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    final List<String> tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
     String word = '';
 
