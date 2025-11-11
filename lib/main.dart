@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,12 +10,23 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
-// GLOBAL PREFS
 late SharedPreferences prefs;
+Uint8List? logoBytes;
+List<Map<String, dynamic>> savedProducts = []; // ← GLOBAL
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  prefs = await SharedPreferences.getInstance(); // ← INITIALIZE ONCE
+  prefs = await SharedPreferences.getInstance();
+  final base64 = prefs.getString('logoBase64');
+  if (base64 != null) {
+    try {
+      logoBytes = base64Decode(base64);
+    } catch (e) {}
+  }
+  final productsJson = prefs.getString('savedProducts');
+  if (productsJson != null) {
+    savedProducts = List<Map<String, dynamic>>.from(jsonDecode(productsJson));
+  }
   runApp(const MyApp());
 }
 
@@ -106,13 +119,28 @@ class _BillScreenState extends State<BillScreen> {
     final date = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final ttf = pw.Font.courier();
 
+    pw.Widget? logoWidget;
+    if (logoBytes != null) {
+      final image = pw.MemoryImage(logoBytes!);
+      logoWidget = pw.SizedBox(width: 80, height: 80, child: pw.Image(image, fit: pw.BoxFit.contain));
+    }
+
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(40),
       build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Center(child: pw.Text(companyName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, font: ttf))),
-        pw.Center(child: pw.Text(address, style: pw.TextStyle(fontSize: 12, font: ttf))),
-        pw.Center(child: pw.Text('GSTIN: $gstin', style: pw.TextStyle(fontSize: 14, font: ttf))),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            if (logoWidget != null) logoWidget,
+            if (logoWidget != null) pw.SizedBox(width: 20),
+            pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              pw.Text(companyName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, font: ttf)),
+              pw.Text(address, style: pw.TextStyle(fontSize: 12, font: ttf)),
+              pw.Text('GSTIN: $gstin', style: pw.TextStyle(fontSize: 14, font: ttf)),
+            ]),
+          ],
+        ),
         pw.SizedBox(height: 20),
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
@@ -137,11 +165,11 @@ class _BillScreenState extends State<BillScreen> {
               p.name,
               p.details,
               p.qty.toString(),
-              '₹${p.rate.toStringAsFixed(2)}',
-              '₹${taxable.toStringAsFixed(2)}',
-              '₹${cgst.toStringAsFixed(2)}',
-              '₹${sgst.toStringAsFixed(2)}',
-              '₹${total.toStringAsFixed(2)}',
+              'Rs.${p.rate.toStringAsFixed(2)}',
+              'Rs.${taxable.toStringAsFixed(2)}',
+              'Rs.${cgst.toStringAsFixed(2)}',
+              'Rs.${sgst.toStringAsFixed(2)}',
+              'Rs.${total.toStringAsFixed(2)}',
             ];
           }).toList(),
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf),
@@ -151,10 +179,10 @@ class _BillScreenState extends State<BillScreen> {
         pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Column(children: [
-            pw.Text('Subtotal: ₹${subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('CGST: ₹${totalCGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('SGST: ₹${totalSGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('Grand Total: ₹${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf)),
+            pw.Text('Subtotal: Rs.${subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('CGST: Rs.${totalCGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('SGST: Rs.${totalSGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('Grand Total: Rs.${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf)),
             pw.Text('In Words: $totalInWords', style: pw.TextStyle(font: ttf)),
           ]),
         ),
@@ -180,7 +208,8 @@ class _BillScreenState extends State<BillScreen> {
             icon: const Icon(Icons.settings),
             onPressed: () async {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              _loadData(); // ← RELOAD AFTER SETTINGS
+              _loadData();
+              setState(() {});
             },
           ),
         ],
@@ -188,9 +217,21 @@ class _BillScreenState extends State<BillScreen> {
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          Text('Company: $companyName', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text('GSTIN: $gstin'),
-          Text('Address: $address'),
+          Row(children: [
+            if (logoBytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(logoBytes!, width: 60, height: 60, fit: BoxFit.cover),
+              ),
+            if (logoBytes != null) const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(companyName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(gstin),
+                Text(address, style: const TextStyle(fontSize: 12)),
+              ]),
+            ),
+          ]),
           const Divider(),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Customer Name *'),
@@ -206,12 +247,36 @@ class _BillScreenState extends State<BillScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
-                  TextFormField(
-                    decoration: const InputDecoration(labelText: 'Product Name *'),
-                    onChanged: (v) => p.name = v,
+                  Autocomplete<String>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
+                      return savedProducts
+                          .where((prod) => prod['name'].toString().toLowerCase().contains(textEditingValue.text.toLowerCase()))
+                          .map((prod) => prod['name'].toString());
+                    },
+                    onSelected: (String selection) {
+                      final selected = savedProducts.firstWhere((prod) => prod['name'] == selection);
+                      p.name = selected['name'];
+                      p.details = selected['hsn'];
+                      p.rate = double.tryParse(selected['rate'].toString()) ?? 0;
+                      p.gstPercent = double.tryParse(selected['gst'].toString()) ?? 18;
+                      setState(() {});
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      controller.text = p.name;
+                      return TextFormField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(labelText: 'Product Name *'),
+                        onChanged: (v) => p.name = v,
+                      );
+                    },
                   ),
                   TextFormField(
                     decoration: const InputDecoration(labelText: 'HSN / Details'),
+                    controller: TextEditingController(text: p.details)..selection = TextSelection.fromPosition(TextPosition(offset: p.details.length)),
                     onChanged: (v) => p.details = v,
                   ),
                   Row(children: [
@@ -219,7 +284,7 @@ class _BillScreenState extends State<BillScreen> {
                       child: TextFormField(
                         decoration: const InputDecoration(labelText: 'Qty'),
                         keyboardType: TextInputType.number,
-                        initialValue: '1',
+                        initialValue: p.qty.toString(),
                         onChanged: (v) => p.qty = int.tryParse(v) ?? 1,
                       ),
                     ),
@@ -228,6 +293,7 @@ class _BillScreenState extends State<BillScreen> {
                       child: TextFormField(
                         decoration: const InputDecoration(labelText: 'Rate'),
                         keyboardType: TextInputType.number,
+                        controller: TextEditingController(text: p.rate > 0 ? p.rate.toStringAsFixed(2) : ''),
                         onChanged: (v) => p.rate = double.tryParse(v) ?? 0,
                       ),
                     ),
@@ -236,7 +302,7 @@ class _BillScreenState extends State<BillScreen> {
                       child: TextFormField(
                         decoration: const InputDecoration(labelText: 'GST%'),
                         keyboardType: TextInputType.number,
-                        initialValue: '18',
+                        controller: TextEditingController(text: p.gstPercent > 0 ? p.gstPercent.toString() : ''),
                         onChanged: (v) => p.gstPercent = double.tryParse(v) ?? 18,
                       ),
                     ),
@@ -258,7 +324,7 @@ class _BillScreenState extends State<BillScreen> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                'Total: ₹${grandTotal.toStringAsFixed(2)}',
+                'Total: Rs.${grandTotal.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -288,6 +354,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String companyName = '';
   String gstin = '';
   String address = '';
+  String? logoBase64;
+  final List<Map<String, String>> products = [];
 
   @override
   void initState() {
@@ -300,6 +368,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       companyName = prefs.getString('companyName') ?? 'Your Shop Name';
       gstin = prefs.getString('gstin') ?? '27AAAAA0000A1Z5';
       address = prefs.getString('address') ?? 'Your Shop Address';
+      logoBase64 = prefs.getString('logoBase64');
+      if (logoBase64 != null) {
+        try {
+          logoBytes = base64Decode(logoBase64!);
+        } catch (e) {}
+      }
+      final json = prefs.getString('savedProducts');
+      if (json != null) {
+        savedProducts = List<Map<String, dynamic>>.from(jsonDecode(json));
+        products.addAll(savedProducts.map((e) => Map<String, String>.from(e)));
+      }
+    });
+  }
+
+  void _addProduct() {
+    setState(() {
+      products.add({'name': '', 'hsn': '', 'rate': '', 'gst': ''});
+    });
+  }
+
+  void _removeProduct(int index) {
+    setState(() {
+      products.removeAt(index);
     });
   }
 
@@ -309,7 +400,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       prefs.setString('companyName', companyName);
       prefs.setString('gstin', gstin);
       prefs.setString('address', address);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings Saved!')));
+      if (logoBase64 != null && logoBase64!.isNotEmpty) {
+        try {
+          logoBytes = base64Decode(logoBase64!);
+          prefs.setString('logoBase64', logoBase64!);
+        } catch (e) {}
+      }
+      // Save products
+      savedProducts = products.map((p) => {
+        'name': p['name'] ?? '',
+        'hsn': p['hsn'] ?? '',
+        'rate': p['rate'] ?? '',
+        'gst': p['gst'] ?? '',
+      }).toList();
+      prefs.setString('savedProducts', jsonEncode(savedProducts));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All Saved!')));
       Navigator.pop(context);
     }
   }
@@ -321,6 +426,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
+          Center(
+            child: CircleAvatar(
+              radius: 50,
+              backgroundImage: logoBytes != null ? MemoryImage(logoBytes!) : null,
+              child: logoBytes == null ? const Icon(Icons.business, size: 50) : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text('Paste Base64 logo (optional)', textAlign: TextAlign.center),
+          TextFormField(
+            decoration: const InputDecoration(hintText: 'iVBORw0KGgoAAAANSUhEUgAA...'),
+            maxLines: 3,
+            initialValue: logoBase64,
+            onSaved: (v) => logoBase64 = v?.trim(),
+          ),
+          const Divider(height: 30),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Company Name *'),
             initialValue: companyName,
@@ -340,10 +461,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
             validator: (v) => v!.isEmpty ? 'Required' : null,
             onSaved: (v) => address = v!.trim(),
           ),
+          const Divider(height: 30),
+          const Text('Add Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          ...products.asMap().entries.map((e) {
+            final i = e.key;
+            final p = e.value;
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(children: [
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Product Name *'),
+                    initialValue: p['name'],
+                    onChanged: (v) => p['name'] = v,
+                  ),
+                  Row(children: [
+                    Expanded(
+                      child: TextFormField(
+                        decoration: const InputDecoration(labelText: 'HSN'),
+                        initialValue: p['hsn'],
+                        onChanged: (v) => p['hsn'] = v,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        decoration: const InputDecoration(labelText: 'Rate'),
+                        keyboardType: TextInputType.number,
+                        initialValue: p['rate'],
+                        onChanged: (v) => p['rate'] = v,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        decoration: const InputDecoration(labelText: 'GST%'),
+                        keyboardType: TextInputType.number,
+                        initialValue: p['gst'],
+                        onChanged: (v) => p['gst'] = v,
+                      ),
+                    ),
+                  ]),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _removeProduct(i),
+                    ),
+                  ),
+                ]),
+              ),
+            );
+          }),
+          ElevatedButton(onPressed: _addProduct, child: const Text('Add Product')),
           const SizedBox(height: 30),
           ElevatedButton(
             onPressed: _saveData,
-            child: const Text('Save Settings'),
+            child: const Text('Save All Settings'),
           ),
         ]),
       ),
