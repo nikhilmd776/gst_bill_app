@@ -12,22 +12,29 @@ import 'package:intl/intl.dart';
 
 late SharedPreferences prefs;
 Uint8List? logoBytes;
-List<Map<String, dynamic>> savedProducts = []; // ← GLOBAL
+List<Map<String, dynamic>> savedProducts = [];
+Map<String, String> customerPhoneMap = {};
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   prefs = await SharedPreferences.getInstance();
+  _loadGlobalData();
+  runApp(const MyApp());
+}
+
+void _loadGlobalData() {
   final base64 = prefs.getString('logoBase64');
   if (base64 != null) {
-    try {
-      logoBytes = base64Decode(base64);
-    } catch (e) {}
+    try { logoBytes = base64Decode(base64); } catch (e) {}
   }
   final productsJson = prefs.getString('savedProducts');
   if (productsJson != null) {
     savedProducts = List<Map<String, dynamic>>.from(jsonDecode(productsJson));
   }
-  runApp(const MyApp());
+  final phoneJson = prefs.getString('customerPhones');
+  if (phoneJson != null) {
+    customerPhoneMap = Map<String, String>.from(jsonDecode(phoneJson));
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -36,7 +43,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GST Bill Generator',
-      theme: ThemeData(primarySwatch: Colors.indigo),
+      theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
       home: const BillScreen(),
     );
   }
@@ -62,6 +69,7 @@ class _BillScreenState extends State<BillScreen> {
   String gstin = '27AAAAA0000A1Z5';
   String address = 'Your Shop Address';
   String customerName = '';
+  String customerPhone = '';
   final List<Product> products = [Product()];
   int invoiceNo = 1;
 
@@ -82,6 +90,10 @@ class _BillScreenState extends State<BillScreen> {
 
   Future<void> _saveInvoice() async {
     await prefs.setInt('invoiceNo', invoiceNo);
+    if (customerName.isNotEmpty && customerPhone.isNotEmpty) {
+      customerPhoneMap[customerName] = customerPhone;
+      await prefs.setString('customerPhones', jsonEncode(customerPhoneMap));
+    }
   }
 
   void addProduct() => setState(() => products.add(Product()));
@@ -108,7 +120,7 @@ class _BillScreenState extends State<BillScreen> {
     return word.trim();
   }
 
-  String get totalInWords => '${numberToWords(grandTotal.round())} Rupees Only';
+  String get totalInWords => '${numberToWords(grandTotal.round())} Only';
 
   Future<void> generatePDF() async {
     if (!_formKey.currentState!.validate()) return;
@@ -147,7 +159,10 @@ class _BillScreenState extends State<BillScreen> {
             pw.Text('Invoice No: $invoiceNo', style: pw.TextStyle(font: ttf)),
             pw.Text('Date: $date', style: pw.TextStyle(font: ttf)),
           ]),
-          pw.Text('Bill to: $customerName', style: pw.TextStyle(font: ttf)),
+          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+            pw.Text('Bill to: $customerName', style: pw.TextStyle(font: ttf)),
+            if (customerPhone.isNotEmpty) pw.Text('Phone: $customerPhone', style: pw.TextStyle(font: ttf)),
+          ]),
         ]),
         pw.SizedBox(height: 10),
         pw.Divider(),
@@ -165,11 +180,11 @@ class _BillScreenState extends State<BillScreen> {
               p.name,
               p.details,
               p.qty.toString(),
-              'Rs.${p.rate.toStringAsFixed(2)}',
-              'Rs.${taxable.toStringAsFixed(2)}',
-              'Rs.${cgst.toStringAsFixed(2)}',
-              'Rs.${sgst.toStringAsFixed(2)}',
-              'Rs.${total.toStringAsFixed(2)}',
+              p.rate.toStringAsFixed(2),
+              taxable.toStringAsFixed(2),
+              cgst.toStringAsFixed(2),
+              sgst.toStringAsFixed(2),
+              total.toStringAsFixed(2),
             ];
           }).toList(),
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf),
@@ -179,10 +194,10 @@ class _BillScreenState extends State<BillScreen> {
         pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Column(children: [
-            pw.Text('Subtotal: Rs.${subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('CGST: Rs.${totalCGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('SGST: Rs.${totalSGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
-            pw.Text('Grand Total: Rs.${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf)),
+            pw.Text('Subtotal: ${subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('CGST: ${totalCGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('SGST: ${totalSGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('Grand Total: ${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf)),
             pw.Text('In Words: $totalInWords', style: pw.TextStyle(font: ttf)),
           ]),
         ),
@@ -203,11 +218,17 @@ class _BillScreenState extends State<BillScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('GST Bill Generator'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () async {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              final json = prefs.getString('savedProducts');
+              if (json != null) {
+                savedProducts = List<Map<String, dynamic>>.from(jsonDecode(json));
+              }
               _loadData();
               setState(() {});
             },
@@ -217,72 +238,127 @@ class _BillScreenState extends State<BillScreen> {
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          Row(children: [
-            if (logoBytes != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.memory(logoBytes!, width: 60, height: 60, fit: BoxFit.cover),
-              ),
-            if (logoBytes != null) const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(companyName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(gstin),
-                Text(address, style: const TextStyle(fontSize: 12)),
+          // COMPANY INFO
+          Card(
+            color: Colors.indigo.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                if (logoBytes != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(logoBytes!, width: 60, height: 60, fit: BoxFit.cover),
+                  ),
+                if (logoBytes != null) const SizedBox(width: 16),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(companyName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.indigo)),
+                    Text(gstin, style: const TextStyle(color: Colors.indigo)),
+                    Text(address, style: const TextStyle(fontSize: 12, color: Colors.indigo)),
+                  ]),
+                ),
               ]),
             ),
-          ]),
-          const Divider(),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Customer Name *'),
-            validator: (v) => v!.isEmpty ? 'Required' : null,
-            onSaved: (v) => customerName = v!.trim(),
           ),
-          const Divider(height: 30),
+          const SizedBox(height: 16),
+
+          // CUSTOMER INFO
+          Card(
+            color: Colors.green.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(children: [
+                const Row(children: [Icon(Icons.person, color: Colors.green), SizedBox(width: 8), Text('Customer Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green))]),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Customer Name *',
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    customerName = v.trim();
+                    if (customerPhoneMap.containsKey(v)) {
+                      customerPhone = customerPhoneMap[v]!;
+                      setState(() {});
+                    }
+                  },
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  onSaved: (v) => customerName = v!.trim(),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    prefixIcon: Icon(Icons.phone),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  initialValue: customerPhone,
+                  onChanged: (v) => customerPhone = v.trim(),
+                ),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // PRODUCT DETAILS
+          const Text('Product Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+          const SizedBox(height: 8),
           ...products.asMap().entries.map((e) {
             final i = e.key;
             final p = e.value;
             return Card(
+              color: Colors.blue.shade50,
               margin: const EdgeInsets.symmetric(vertical: 8),
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Column(children: [
                   Autocomplete<String>(
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text.isEmpty) {
-                        return const Iterable<String>.empty();
-                      }
+                    optionsBuilder: (textEditingValue) {
+                      if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
                       return savedProducts
                           .where((prod) => prod['name'].toString().toLowerCase().contains(textEditingValue.text.toLowerCase()))
                           .map((prod) => prod['name'].toString());
                     },
                     onSelected: (String selection) {
-                      final selected = savedProducts.firstWhere((prod) => prod['name'] == selection);
-                      p.name = selected['name'];
-                      p.details = selected['hsn'];
-                      p.rate = double.tryParse(selected['rate'].toString()) ?? 0;
-                      p.gstPercent = double.tryParse(selected['gst'].toString()) ?? 18;
-                      setState(() {});
+                      final selected = savedProducts.firstWhere(
+                        (prod) => prod['name'].toString().trim().toLowerCase() == selection.trim().toLowerCase(),
+                        orElse: () => <String, dynamic>{},
+                      );
+                      if (selected.isNotEmpty) {
+                        p.name = selected['name'];
+                        p.details = selected['hsn'] ?? '';
+                        p.rate = double.tryParse(selected['rate'].toString()) ?? 0.0;
+                        p.gstPercent = double.tryParse(selected['gst'].toString()) ?? 18.0;
+                        setState(() {});
+                      }
                     },
                     fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                       controller.text = p.name;
                       return TextFormField(
                         controller: controller,
                         focusNode: focusNode,
-                        decoration: const InputDecoration(labelText: 'Product Name *'),
+                        decoration: const InputDecoration(
+                          labelText: 'Product Name *',
+                          border: OutlineInputBorder(),
+                        ),
                         onChanged: (v) => p.name = v,
                       );
                     },
                   ),
+                  const SizedBox(height: 12),
                   TextFormField(
-                    decoration: const InputDecoration(labelText: 'HSN / Details'),
-                    controller: TextEditingController(text: p.details)..selection = TextSelection.fromPosition(TextPosition(offset: p.details.length)),
+                    decoration: const InputDecoration(labelText: 'HSN / Details', border: OutlineInputBorder()),
+                    controller: TextEditingController(text: p.details)
+                      ..selection = TextSelection.fromPosition(TextPosition(offset: p.details.length)),
                     onChanged: (v) => p.details = v,
                   ),
+                  const SizedBox(height: 12),
                   Row(children: [
                     Expanded(
                       child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'Qty'),
+                        decoration: const InputDecoration(labelText: 'Qty', border: OutlineInputBorder()),
                         keyboardType: TextInputType.number,
                         initialValue: p.qty.toString(),
                         onChanged: (v) => p.qty = int.tryParse(v) ?? 1,
@@ -291,22 +367,25 @@ class _BillScreenState extends State<BillScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'Rate'),
+                        decoration: const InputDecoration(labelText: 'Rate', border: OutlineInputBorder()),
                         keyboardType: TextInputType.number,
-                        controller: TextEditingController(text: p.rate > 0 ? p.rate.toStringAsFixed(2) : ''),
+                        controller: TextEditingController(text: p.rate > 0 ? p.rate.toStringAsFixed(2) : '')
+                          ..selection = TextSelection.fromPosition(TextPosition(offset: (p.rate > 0 ? p.rate.toStringAsFixed(2) : '').length)),
                         onChanged: (v) => p.rate = double.tryParse(v) ?? 0,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'GST%'),
+                        decoration: const InputDecoration(labelText: 'GST%', border: OutlineInputBorder()),
                         keyboardType: TextInputType.number,
-                        controller: TextEditingController(text: p.gstPercent > 0 ? p.gstPercent.toString() : ''),
+                        controller: TextEditingController(text: p.gstPercent > 0 ? p.gstPercent.toString() : '')
+                          ..selection = TextSelection.fromPosition(TextPosition(offset: (p.gstPercent > 0 ? p.gstPercent.toString() : '').length)),
                         onChanged: (v) => p.gstPercent = double.tryParse(v) ?? 18,
                       ),
                     ),
                   ]),
+                  const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
@@ -318,22 +397,35 @@ class _BillScreenState extends State<BillScreen> {
               ),
             );
           }),
-          ElevatedButton(onPressed: addProduct, child: const Text('Add Product')),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Add Product'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: addProduct,
+          ),
           const SizedBox(height: 20),
+
+          // TOTAL (NO "Rs.")
           Card(
+            color: Colors.orange.shade50,
             child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Total: Rs.${grandTotal.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Grand Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.orange)),
+                Text('${grandTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
+              ]),
             ),
           ),
           const SizedBox(height: 20),
+
           ElevatedButton.icon(
-            icon: const Icon(Icons.picture_as_pdf),
-            label: const Text('Generate • Print • Share PDF'),
-            style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+            label: const Text('Generate • Print • Share PDF', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo,
+              padding: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: generatePDF,
           ),
         ]),
@@ -342,7 +434,7 @@ class _BillScreenState extends State<BillScreen> {
   }
 }
 
-// ADMIN SETTINGS PAGE
+// SETTINGS SCREEN
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -369,11 +461,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       gstin = prefs.getString('gstin') ?? '27AAAAA0000A1Z5';
       address = prefs.getString('address') ?? 'Your Shop Address';
       logoBase64 = prefs.getString('logoBase64');
-      if (logoBase64 != null) {
-        try {
-          logoBytes = base64Decode(logoBase64!);
-        } catch (e) {}
-      }
       final json = prefs.getString('savedProducts');
       if (json != null) {
         savedProducts = List<Map<String, dynamic>>.from(jsonDecode(json));
@@ -382,17 +469,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  void _addProduct() {
-    setState(() {
-      products.add({'name': '', 'hsn': '', 'rate': '', 'gst': ''});
-    });
-  }
-
-  void _removeProduct(int index) {
-    setState(() {
-      products.removeAt(index);
-    });
-  }
+  void _addProduct() => setState(() => products.add({'name': '', 'hsn': '', 'rate': '', 'gst': ''}));
+  void _removeProduct(int i) => setState(() => products.removeAt(i));
 
   void _saveData() {
     if (_formKey.currentState!.validate()) {
@@ -401,12 +479,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       prefs.setString('gstin', gstin);
       prefs.setString('address', address);
       if (logoBase64 != null && logoBase64!.isNotEmpty) {
-        try {
-          logoBytes = base64Decode(logoBase64!);
-          prefs.setString('logoBase64', logoBase64!);
-        } catch (e) {}
+        try { logoBytes = base64Decode(logoBase64!); } catch (e) {}
+        prefs.setString('logoBase64', logoBase64!);
       }
-      // Save products
       savedProducts = products.map((p) => {
         'name': p['name'] ?? '',
         'hsn': p['hsn'] ?? '',
@@ -422,7 +497,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin Settings')),
+      appBar: AppBar(title: const Text('Admin Settings'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -442,85 +517,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onSaved: (v) => logoBase64 = v?.trim(),
           ),
           const Divider(height: 30),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Company Name *'),
-            initialValue: companyName,
-            validator: (v) => v!.isEmpty ? 'Required' : null,
-            onSaved: (v) => companyName = v!.trim(),
-          ),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'GSTIN *'),
-            initialValue: gstin,
-            validator: (v) => v!.isEmpty ? 'Required' : null,
-            onSaved: (v) => gstin = v!.trim(),
-          ),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Address *'),
-            initialValue: address,
-            maxLines: 3,
-            validator: (v) => v!.isEmpty ? 'Required' : null,
-            onSaved: (v) => address = v!.trim(),
-          ),
+          TextFormField(decoration: const InputDecoration(labelText: 'Company Name *', border: OutlineInputBorder()), initialValue: companyName, validator: (v) => v!.isEmpty ? 'Required' : null, onSaved: (v) => companyName = v!.trim()),
+          TextFormField(decoration: const InputDecoration(labelText: 'GSTIN *', border: OutlineInputBorder()), initialValue: gstin, validator: (v) => v!.isEmpty ? 'Required' : null, onSaved: (v) => gstin = v!.trim()),
+          TextFormField(decoration: const InputDecoration(labelText: 'Address *', border: OutlineInputBorder()), initialValue: address, maxLines: 3, validator: (v) => v!.isEmpty ? 'Required' : null, onSaved: (v) => address = v!.trim()),
           const Divider(height: 30),
           const Text('Add Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 10),
           ...products.asMap().entries.map((e) {
-            final i = e.key;
-            final p = e.value;
+            final i = e.key; final p = e.value;
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 8),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
-                  TextFormField(
-                    decoration: const InputDecoration(labelText: 'Product Name *'),
-                    initialValue: p['name'],
-                    onChanged: (v) => p['name'] = v,
-                  ),
+                  TextFormField(decoration: const InputDecoration(labelText: 'Product Name *'), initialValue: p['name'], onChanged: (v) => p['name'] = v),
                   Row(children: [
-                    Expanded(
-                      child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'HSN'),
-                        initialValue: p['hsn'],
-                        onChanged: (v) => p['hsn'] = v,
-                      ),
-                    ),
+                    Expanded(child: TextFormField(decoration: const InputDecoration(labelText: 'HSN'), initialValue: p['hsn'], onChanged: (v) => p['hsn'] = v)),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'Rate'),
-                        keyboardType: TextInputType.number,
-                        initialValue: p['rate'],
-                        onChanged: (v) => p['rate'] = v,
-                      ),
-                    ),
+                    Expanded(child: TextFormField(decoration: const InputDecoration(labelText: 'Rate'), keyboardType: TextInputType.number, initialValue: p['rate'], onChanged: (v) => p['rate'] = v)),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        decoration: const InputDecoration(labelText: 'GST%'),
-                        keyboardType: TextInputType.number,
-                        initialValue: p['gst'],
-                        onChanged: (v) => p['gst'] = v,
-                      ),
-                    ),
+                    Expanded(child: TextFormField(decoration: const InputDecoration(labelText: 'GST%'), keyboardType: TextInputType.number, initialValue: p['gst'], onChanged: (v) => p['gst'] = v)),
                   ]),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _removeProduct(i),
-                    ),
-                  ),
+                  Align(alignment: Alignment.centerRight, child: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _removeProduct(i))),
                 ]),
               ),
             );
           }),
           ElevatedButton(onPressed: _addProduct, child: const Text('Add Product')),
           const SizedBox(height: 30),
-          ElevatedButton(
-            onPressed: _saveData,
-            child: const Text('Save All Settings'),
-          ),
+          ElevatedButton(onPressed: _saveData, child: const Text('Save All Settings'), style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white)),
         ]),
       ),
     );
