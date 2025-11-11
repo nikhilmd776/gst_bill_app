@@ -8,7 +8,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 
-void main() => runApp(const MyApp());
+// GLOBAL PREFS
+late SharedPreferences prefs;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  prefs = await SharedPreferences.getInstance(); // ← INITIALIZE ONCE
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -40,9 +47,9 @@ class _BillScreenState extends State<BillScreen> {
   final _formKey = GlobalKey<FormState>();
   String companyName = 'Your Shop Name';
   String gstin = '27AAAAA0000A1Z5';
+  String address = 'Your Shop Address';
   String customerName = '';
   final List<Product> products = [Product()];
-  late SharedPreferences prefs;
   int invoiceNo = 1;
 
   @override
@@ -51,18 +58,16 @@ class _BillScreenState extends State<BillScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    prefs = await SharedPreferences.getInstance();
+  void _loadData() {
     setState(() {
-      companyName = prefs.getString('companyName') ?? companyName;
-      gstin = prefs.getString('gstin') ?? gstin;
+      companyName = prefs.getString('companyName') ?? 'Your Shop Name';
+      gstin = prefs.getString('gstin') ?? '27AAAAA0000A1Z5';
+      address = prefs.getString('address') ?? 'Your Shop Address';
       invoiceNo = (prefs.getInt('invoiceNo') ?? 0) + 1;
     });
   }
 
-  Future<void> _saveData() async {
-    await prefs.setString('companyName', companyName);
-    await prefs.setString('gstin', gstin);
+  Future<void> _saveInvoice() async {
     await prefs.setInt('invoiceNo', invoiceNo);
   }
 
@@ -74,38 +79,18 @@ class _BillScreenState extends State<BillScreen> {
   double get totalSGST => totalCGST;
   double get grandTotal => subtotal + totalCGST + totalSGST;
 
-  // CUSTOM "IN WORDS" FUNCTION (NO PACKAGE)
   String numberToWords(int number) {
     if (number == 0) return 'Zero';
-
     final List<String> ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     final List<String> tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
     String word = '';
-
-    if (number >= 10000000) {
-      word += '${numberToWords(number ~/ 10000000)} Crore ';
-      number %= 10000000;
-    }
-    if (number >= 100000) {
-      word += '${numberToWords(number ~/ 100000)} Lakh ';
-      number %= 100000;
-    }
-    if (number >= 1000) {
-      word += '${numberToWords(number ~/ 1000)} Thousand ';
-      number %= 1000;
-    }
-    if (number >= 100) {
-      word += '${ones[number ~/ 100]} Hundred ';
-      number %= 100;
-    }
+    if (number >= 10000000) { word += '${numberToWords(number ~/ 10000000)} Crore '; number %= 10000000; }
+    if (number >= 100000) { word += '${numberToWords(number ~/ 100000)} Lakh '; number %= 100000; }
+    if (number >= 1000) { word += '${numberToWords(number ~/ 1000)} Thousand '; number %= 1000; }
+    if (number >= 100) { word += '${ones[number ~/ 100]} Hundred '; number %= 100; }
     if (number > 0) {
-      if (number < 20) {
-        word += ones[number];
-      } else {
-        word += tens[number ~/ 10];
-        if (number % 10 > 0) word += ' ${ones[number % 10]}';
-      }
+      if (number < 20) word += ones[number];
+      else { word += tens[number ~/ 10]; if (number % 10 > 0) word += ' ${ones[number % 10]}'; }
     }
     return word.trim();
   }
@@ -115,24 +100,26 @@ class _BillScreenState extends State<BillScreen> {
   Future<void> generatePDF() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
-    await _saveData();
+    await _saveInvoice();
 
     final pdf = pw.Document();
     final date = DateFormat('dd/MM/yyyy').format(DateTime.now());
+    final ttf = pw.Font.courier();
 
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(40),
       build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Center(child: pw.Text(companyName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold))),
-        pw.Center(child: pw.Text('GSTIN: $gstin', style: const pw.TextStyle(fontSize: 14))),
+        pw.Center(child: pw.Text(companyName, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, font: ttf))),
+        pw.Center(child: pw.Text(address, style: pw.TextStyle(fontSize: 12, font: ttf))),
+        pw.Center(child: pw.Text('GSTIN: $gstin', style: pw.TextStyle(fontSize: 14, font: ttf))),
         pw.SizedBox(height: 20),
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('Invoice No: $invoiceNo'),
-            pw.Text('Date: $date'),
+            pw.Text('Invoice No: $invoiceNo', style: pw.TextStyle(font: ttf)),
+            pw.Text('Date: $date', style: pw.TextStyle(font: ttf)),
           ]),
-          pw.Text('Bill to: $customerName'),
+          pw.Text('Bill to: $customerName', style: pw.TextStyle(font: ttf)),
         ]),
         pw.SizedBox(height: 10),
         pw.Divider(),
@@ -157,21 +144,22 @@ class _BillScreenState extends State<BillScreen> {
               '₹${total.toStringAsFixed(2)}',
             ];
           }).toList(),
-          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf),
+          cellStyle: pw.TextStyle(font: ttf),
         ),
         pw.Divider(),
         pw.Align(
           alignment: pw.Alignment.centerRight,
           child: pw.Column(children: [
-            pw.Text('Subtotal: ₹${subtotal.toStringAsFixed(2)}'),
-            pw.Text('CGST: ₹${totalCGST.toStringAsFixed(2)}'),
-            pw.Text('SGST: ₹${totalSGST.toStringAsFixed(2)}'),
-            pw.Text('Grand Total: ₹${grandTotal.toStringAsFixed(2)}'),
-            pw.Text('In Words: $totalInWords'),
+            pw.Text('Subtotal: ₹${subtotal.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('CGST: ₹${totalCGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('SGST: ₹${totalSGST.toStringAsFixed(2)}', style: pw.TextStyle(font: ttf)),
+            pw.Text('Grand Total: ₹${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf)),
+            pw.Text('In Words: $totalInWords', style: pw.TextStyle(font: ttf)),
           ]),
         ),
         pw.Spacer(),
-        pw.Center(child: pw.Text('Thank You! Visit Again')),
+        pw.Center(child: pw.Text('Thank You! Visit Again', style: pw.TextStyle(font: ttf))),
       ]),
     ));
 
@@ -185,20 +173,25 @@ class _BillScreenState extends State<BillScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('GST Bill Generator')),
+      appBar: AppBar(
+        title: const Text('GST Bill Generator'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              _loadData(); // ← RELOAD AFTER SETTINGS
+            },
+          ),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Company Name'),
-            initialValue: companyName,
-            onSaved: (v) => companyName = v!.trim(),
-          ),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'GSTIN'),
-            initialValue: gstin,
-            onSaved: (v) => gstin = v!.trim(),
-          ),
+          Text('Company: $companyName', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('GSTIN: $gstin'),
+          Text('Address: $address'),
+          const Divider(),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Customer Name *'),
             validator: (v) => v!.isEmpty ? 'Required' : null,
@@ -265,7 +258,7 @@ class _BillScreenState extends State<BillScreen> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                'Subtotal: ₹${subtotal.toStringAsFixed(2)} | CGST: ₹${totalCGST.toStringAsFixed(2)} | SGST: ₹${totalSGST.toStringAsFixed(2)} | Total: ₹${grandTotal.toStringAsFixed(2)}',
+                'Total: ₹${grandTotal.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -276,6 +269,81 @@ class _BillScreenState extends State<BillScreen> {
             label: const Text('Generate • Print • Share PDF'),
             style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
             onPressed: generatePDF,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ADMIN SETTINGS PAGE
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _formKey = GlobalKey<FormState>();
+  String companyName = '';
+  String gstin = '';
+  String address = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    setState(() {
+      companyName = prefs.getString('companyName') ?? 'Your Shop Name';
+      gstin = prefs.getString('gstin') ?? '27AAAAA0000A1Z5';
+      address = prefs.getString('address') ?? 'Your Shop Address';
+    });
+  }
+
+  void _saveData() {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      prefs.setString('companyName', companyName);
+      prefs.setString('gstin', gstin);
+      prefs.setString('address', address);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings Saved!')));
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Settings')),
+      body: Form(
+        key: _formKey,
+        child: ListView(padding: const EdgeInsets.all(16), children: [
+          TextFormField(
+            decoration: const InputDecoration(labelText: 'Company Name *'),
+            initialValue: companyName,
+            validator: (v) => v!.isEmpty ? 'Required' : null,
+            onSaved: (v) => companyName = v!.trim(),
+          ),
+          TextFormField(
+            decoration: const InputDecoration(labelText: 'GSTIN *'),
+            initialValue: gstin,
+            validator: (v) => v!.isEmpty ? 'Required' : null,
+            onSaved: (v) => gstin = v!.trim(),
+          ),
+          TextFormField(
+            decoration: const InputDecoration(labelText: 'Address *'),
+            initialValue: address,
+            maxLines: 3,
+            validator: (v) => v!.isEmpty ? 'Required' : null,
+            onSaved: (v) => address = v!.trim(),
+          ),
+          const SizedBox(height: 30),
+          ElevatedButton(
+            onPressed: _saveData,
+            child: const Text('Save Settings'),
           ),
         ]),
       ),
