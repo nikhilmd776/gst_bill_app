@@ -42,7 +42,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GST Bill Generator',
+      title: 'Invoice Generator',
       theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
       home: const BillScreen(),
     );
