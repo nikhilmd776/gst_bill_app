@@ -14,7 +14,6 @@ import 'package:google_fonts/google_fonts.dart';
 late SharedPreferences prefs;
 List<Map<String, dynamic>> savedProducts = [];
 Map<String, String> customerPhoneMap = {};
-int invoiceNo = 1;
 
 // GLOBAL NOTIFIERS
 final companyNotifier = ValueNotifier<String>('Your Shop Name');
@@ -36,7 +35,6 @@ void _loadGlobalData() {
   companyNotifier.value = prefs.getString('companyName') ?? 'Your Shop Name';
   gstinNotifier.value = prefs.getString('gstin') ?? '27AAAAA0000A1Z5';
   addressNotifier.value = prefs.getString('address') ?? 'Your Shop Address';
-  invoiceNo = (prefs.getInt('invoiceNo') ?? 0) + 1;
 
   final base64 = prefs.getString('logoBase64');
   if (base64 != null) {
@@ -204,10 +202,18 @@ class _BillScreenState extends State<BillScreen> {
       await prefs.setString('customerPhones', jsonEncode(customerPhoneMap));
     }
 
-    await prefs.setInt('invoiceNo', invoiceNo);
-
     final pdf = pw.Document();
-    final date = DateFormat('dd MMM yyyy').format(DateTime.now());
+    final now = DateTime.now();
+    final date = DateFormat('dd MMM yyyy').format(now);
+    final time = DateFormat('hh:mm a').format(now); // 08:21 PM
+    final dateTime = '$date, $time';
+    final today = DateFormat('yyyyMMdd').format(DateTime.now());
+    final countKey = '$today-count';
+    int dailyCount = prefs.getInt(countKey) ?? 0;
+    dailyCount++;
+    await prefs.setInt(countKey, dailyCount);
+    final invoiceNo = dailyCount;
+    final invoiceId = '$today-${dailyCount.toString().padLeft(3, '0')}';
     final font = await PdfGoogleFonts.robotoRegular();
     final bold = await PdfGoogleFonts.robotoBold();
 
@@ -260,8 +266,8 @@ class _BillScreenState extends State<BillScreen> {
                         ),
                       ),
                       pw.SizedBox(height: 8),
-                      pw.Text('Invoice: #$invoiceNo', style: pw.TextStyle(font: font)),
-                      pw.Text('Date: $date', style: pw.TextStyle(font: font)),
+                      pw.Text('Invoice: #$invoiceId', style: pw.TextStyle(font: font)),
+                      pw.Text('Date: $dateTime', style: pw.TextStyle(font: font)),
                     ],
                   ),
                 ],
@@ -275,27 +281,25 @@ class _BillScreenState extends State<BillScreen> {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  // Bill To + Name
                   pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text('Bill To: ', style: pw.TextStyle(font: bold)),
-                      pw.Text(customerName, style: pw.TextStyle(font: font)),
+                      pw.Expanded(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(customerName, style: pw.TextStyle(font: font)),
+                            if (pdfCustomerAddress.isNotEmpty)
+                              pw.Text(pdfCustomerAddress, style: pw.TextStyle(font: font, fontSize: 10)),
+                            if (customerPhone.isNotEmpty)
+                              pw.Text('Phone: $customerPhone', style: pw.TextStyle(font: font, fontSize: 10)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  if (pdfCustomerAddress.isNotEmpty)
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(top: 4),
-                      child: pw.Text(pdfCustomerAddress, style: pw.TextStyle(font: font, fontSize: 10)),
-                    ),
-                  if (customerPhone.isNotEmpty)
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(top: 4),
-                      child: pw.Row(
-                        children: [
-                          pw.Spacer(),
-                          pw.Text('Phone: $customerPhone', style: pw.TextStyle(font: font, fontSize: 10)),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -395,9 +399,9 @@ class _BillScreenState extends State<BillScreen> {
     await Printing.layoutPdf(onLayout: (_) => pdf.save());
 
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/Invoice_$invoiceNo.pdf');
+    final file = File('${dir.path}/Invoice_$invoiceId.pdf');
     await file.writeAsBytes(await pdf.save());
-    await Share.shareXFiles([XFile(file.path)], text: 'Invoice #$invoiceNo');
+    await Share.shareXFiles([XFile(file.path)], text: 'Invoice #$invoiceId');
   }
 
   @override
