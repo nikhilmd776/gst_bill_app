@@ -99,6 +99,8 @@ class _BillScreenState extends State<BillScreen> {
   final _formKey = GlobalKey<FormState>();
   String customerName = '';
   String customerPhone = '';
+  String customerAddress = '';
+  String invoiceType = 'estimate';
   final List<Product> products = [Product()];
 
   @override
@@ -189,7 +191,7 @@ class _BillScreenState extends State<BillScreen> {
         return; // Stop PDF generation
       }
     }
-
+    final String pdfCustomerAddress = customerAddress;
     for (final p in products) {
       p.rate = double.tryParse(p.rateController.text) ?? 0;
       p.gstPercent = double.tryParse(p.gstController.text) ?? 18;
@@ -242,13 +244,21 @@ class _BillScreenState extends State<BillScreen> {
                       children: [
                         pw.Text(companyNotifier.value, style: pw.TextStyle(font: bold, fontSize: 20)),
                         pw.Text(addressNotifier.value, style: pw.TextStyle(font: font, fontSize: 12)),
-                        pw.Text('GSTIN: ${gstinNotifier.value}', style: pw.TextStyle(font: font, fontSize: 12)),
+                        if (invoiceType != 'estimate')
+                          pw.Text('GSTIN: ${gstinNotifier.value}', style: pw.TextStyle(font: font, fontSize: 12)),
                       ],
                     ),
                   ),
                   pw.Column(
                     children: [
-                      pw.Text('TAX INVOICE', style: pw.TextStyle(font: bold, fontSize: 18, color: PdfColors.blue800)),
+                        pw.Text(
+                        invoiceType == 'estimate' ? 'ESTIMATE' : 'TAX INVOICE',
+                        style: pw.TextStyle(
+                          font: bold,
+                          fontSize: 18,
+                          color: invoiceType == 'estimate' ? PdfColors.red800 : PdfColors.blue800,
+                        ),
+                      ),
                       pw.SizedBox(height: 8),
                       pw.Text('Invoice: #$invoiceNo', style: pw.TextStyle(font: font)),
                       pw.Text('Date: $date', style: pw.TextStyle(font: font)),
@@ -262,13 +272,30 @@ class _BillScreenState extends State<BillScreen> {
             pw.Container(
               padding: const pw.EdgeInsets.all(12),
               decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
-              child: pw.Row(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Bill To: ', style: pw.TextStyle(font: bold)),
-                  pw.Text(customerName, style: pw.TextStyle(font: font)),
-                  pw.Spacer(),
+                  pw.Row(
+                    children: [
+                      pw.Text('Bill To: ', style: pw.TextStyle(font: bold)),
+                      pw.Text(customerName, style: pw.TextStyle(font: font)),
+                    ],
+                  ),
+                  if (pdfCustomerAddress.isNotEmpty)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(top: 4),
+                      child: pw.Text(pdfCustomerAddress, style: pw.TextStyle(font: font, fontSize: 10)),
+                    ),
                   if (customerPhone.isNotEmpty)
-                    pw.Text('Phone: $customerPhone', style: pw.TextStyle(font: font)),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(top: 4),
+                      child: pw.Row(
+                        children: [
+                          pw.Spacer(),
+                          pw.Text('Phone: $customerPhone', style: pw.TextStyle(font: font, fontSize: 10)),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -584,11 +611,50 @@ class _BillScreenState extends State<BillScreen> {
                       initialValue: customerPhone,
                       onChanged: (v) => customerPhone = v.trim(),
                     ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      decoration: const InputDecoration(
+                        labelText: 'Address',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                      onChanged: (v) => customerAddress = v.trim(),
+                    ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
+            
+            const SizedBox(height: 16),
+            Card(
+              color: Colors.purple.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Estimate', style: TextStyle(fontWeight: FontWeight.bold)),
+                        value: 'estimate',
+                        groupValue: invoiceType,
+                        onChanged: (val) => setState(() => invoiceType = val!),
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Tax Invoice'),
+                        value: 'invoice',
+                        groupValue: invoiceType,
+                        onChanged: (val) => setState(() => invoiceType = val!),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
             const Text('Product Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
             const SizedBox(height: 8),
