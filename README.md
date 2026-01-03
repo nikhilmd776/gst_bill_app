@@ -6,7 +6,7 @@
 3. **Repository**: `New repository`
    - Name: `gst_bill_app` (use underscore!)
    - Public → **Create**
-4. **Dev Container**: **Ubuntu (default)**
+4. **Dev container configuration**: GitHub will automatically detect and use the "Flutter with Android SDK" configuration (it auto-sets up everything)
 5. Click **"Create codespace"**
 
 Wait 2 minutes → VS Code opens
@@ -64,30 +64,18 @@ flutter run -d web-server --web-port 4000
 
 ---
 
-### STEP 4: FULL WORKING APK BUILD SCRIPT
+### STEP 4: BUILD APK (Everything is Pre-Configured)
 
 ```bash
-# === FULL WORKING APK BUILD SCRIPT ===
-cd /workspaces/gst_bill_app && \
-rm -rf $HOME/android-sdk && \
-mkdir -p $HOME/android-sdk/cmdline-tools && \
-cd $HOME/android-sdk/cmdline-tools && \
-wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip && \
-unzip -q commandlinetools-linux-9477386_latest.zip && \
-mv cmdline-tools latest && \
-cd /workspaces/gst_bill_app && \
-export ANDROID_HOME=$HOME/android-sdk && \
-export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools && \
-yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses && \
-$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" && \
+# === SIMPLE APK BUILD (SDK already installed) ===
 flutter build apk --release
 ```
 
-**Wait 3 minutes** → **APK READY**
+**Wait 1 minute** → **APK READY**
 
 ---
 
-### STEP 6: DOWNLOAD APK
+### STEP 5: DOWNLOAD APK
 
 1. Left panel → `build` → `app` → `outputs` → `flutter-apk`
 2. Right-click `app-release.apk` → **Download**
