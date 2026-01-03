@@ -76,7 +76,7 @@ class Product {
   String details = '';
   int qty = 1;
   double rate = 0.0;
-  double gstPercent = 18.0;
+  double gstPercent = 0.0;
 
   final rateController = TextEditingController();
   final hsnController = TextEditingController();
@@ -192,10 +192,19 @@ class _BillScreenState extends State<BillScreen> {
     final String pdfCustomerAddress = customerAddress;
     for (final p in products) {
       p.rate = double.tryParse(p.rateController.text) ?? 0;
-      p.gstPercent = double.tryParse(p.gstController.text) ?? 18;
+      p.gstPercent = double.tryParse(p.gstController.text) ?? 0;
       p.details = p.hsnController.text;
     }
     _updateTotal();
+
+    double subtotal = 0.0;
+    double totalGST = 0.0;
+    for (final p in products) {
+      subtotal += p.taxable;
+      totalGST += p.gst;
+    }
+    double cgst = totalGST / 2;
+    double sgst = totalGST / 2;
 
     if (customerName.isNotEmpty && customerPhone.isNotEmpty) {
       customerPhoneMap[customerName] = customerPhone;
@@ -356,21 +365,21 @@ class _BillScreenState extends State<BillScreen> {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text('Subtotal:', style: pw.TextStyle(font: font)),
-                        pw.Text(products.fold(0.0, (s, p) => s + p.taxable).toStringAsFixed(2), style: pw.TextStyle(font: font)),
+                        pw.Text(subtotal.toStringAsFixed(2), style: pw.TextStyle(font: font)),
                       ],
                     ),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text('CGST:', style: pw.TextStyle(font: font)),
-                        pw.Text((totalNotifier.value / 2 - products.fold(0.0, (s, p) => s + p.taxable)).toStringAsFixed(2), style: pw.TextStyle(font: font)),
+                        pw.Text(cgst.toStringAsFixed(2), style: pw.TextStyle(font: font)),
                       ],
                     ),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text('SGST:', style: pw.TextStyle(font: font)),
-                        pw.Text((totalNotifier.value / 2 - products.fold(0.0, (s, p) => s + p.taxable)).toStringAsFixed(2), style: pw.TextStyle(font: font)),
+                        pw.Text(sgst.toStringAsFixed(2), style: pw.TextStyle(font: font)),
                       ],
                     ),
                     pw.Divider(),
@@ -688,7 +697,7 @@ class _BillScreenState extends State<BillScreen> {
                             p.name = selected['name'];
                             p.details = selected['hsn'] ?? '';
                             p.rate = double.tryParse(selected['rate'].toString()) ?? 0.0;
-                            p.gstPercent = double.tryParse(selected['gst'].toString()) ?? 18.0;
+                            p.gstPercent = double.tryParse(selected['gst'].toString()) ?? 0.0;
 
                             p.hsnController.text = p.details;
                             p.rateController.text = p.rate > 0 ? p.rate.toStringAsFixed(2) : '';
@@ -755,7 +764,7 @@ class _BillScreenState extends State<BillScreen> {
                               decoration: const InputDecoration(labelText: 'GST%', border: OutlineInputBorder()),
                               keyboardType: TextInputType.number,
                               onChanged: (v) {
-                                p.gstPercent = double.tryParse(v) ?? 18;
+                                p.gstPercent = double.tryParse(v) ?? 0.0;
                                 _updateTotal();
                               },
                             ),
@@ -809,7 +818,7 @@ class _BillScreenState extends State<BillScreen> {
                                       p.details = '';
                                       p.qty = 1;
                                       p.rate = 0.0;
-                                      p.gstPercent = 18.0;
+                                      p.gstPercent = 0.0;
                                       p.rateController.clear();
                                       p.hsnController.clear();
                                       p.gstController.clear();

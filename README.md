@@ -84,3 +84,33 @@ flutter build apk --release
 
 ## DONE!
 
+---
+
+### STEP 6: BUILD & SERVE WEB (Static — recommended in containers) 🔧
+
+To create a production web build and serve it locally (works well inside Codespaces/devcontainers):
+
+1. Build the web output:
+```bash
+flutter build web
+```
+
+2. Serve the build folder on port 4000:
+```bash
+python3 -m http.server 4000 --directory build/web
+```
+
+3. Open in browser:
+- Locally: http://127.0.0.1:4000
+- Or use Codespaces forwarded URL: https://<workspace>-4000.app.github.dev
+
+Notes:
+- If you need live debugging/hot reload in Chrome but are inside a restricted container, Chrome may fail to launch due to sandboxing. As a quick workaround for local testing only, you can launch Chrome with no sandbox:
+```bash
+echo -e '#!/bin/bash\nexec /usr/bin/google-chrome --no-sandbox "$@"' > /tmp/chrome_no_sandbox.sh && chmod +x /tmp/chrome_no_sandbox.sh
+CHROME_EXECUTABLE=/tmp/chrome_no_sandbox.sh flutter run -d chrome --web-hostname 0.0.0.0 --web-port 4000 -v
+```
+- For most container workflows, the static build + `http.server` is the most reliable method.
+
+---
+
