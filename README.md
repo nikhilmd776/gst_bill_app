@@ -68,6 +68,8 @@ flutter run -d web-server --web-port 4000
 
 ```bash
 # === SIMPLE APK BUILD (SDK already installed) ===
+flutter clean
+flutter pub get
 flutter build apk --release
 ```
 
