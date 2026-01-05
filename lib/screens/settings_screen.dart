@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../services/backup_service.dart';
 import '../globals.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -191,6 +192,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               );
             }),
+
+            const SizedBox(height: 30),
+
+            // Data Backup Section
+            const Text('Data Backup & Restore', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Backup your invoice data to prevent loss. You can export all invoices to a JSON file and restore them later.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => BackupService.exportData(context),
+                            icon: const Icon(Icons.download),
+                            label: const Text('Export Data'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => BackupService.importData(context),
+                            icon: const Icon(Icons.upload),
+                            label: const Text('Import Data'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => BackupService.clearAllData(context),
+                        icon: const Icon(Icons.delete_forever, color: Colors.red),
+                        label: const Text('Clear All Data', style: TextStyle(color: Colors.red)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
             const SizedBox(height: 30),
 

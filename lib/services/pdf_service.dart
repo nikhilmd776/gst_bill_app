@@ -10,6 +10,9 @@ import 'package:intl/intl.dart';
 import '../models/product.dart';
 import '../utils/number_to_words.dart';
 import '../globals.dart';
+import '../models/invoice.dart';
+import '../models/invoice_item.dart';
+import 'database_service.dart';
 
 Future<void> generateAndSharePDF(
   BuildContext context,
@@ -66,6 +69,34 @@ Future<void> generateAndSharePDF(
   final invoiceId = '$today-${dailyCount.toString().padLeft(3, '0')}';
   final font = await PdfGoogleFonts.robotoRegular();
   final bold = await PdfGoogleFonts.robotoBold();
+
+  // Save invoice to database
+  try {
+    final invoice = Invoice(
+      invoiceNumber: invoiceId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
+      totalAmount: totalNotifier.value,
+      gstAmount: totalGST,
+      invoiceType: invoiceType,
+      createdDate: now,
+    );
+
+    final invoiceItems = products.map((product) => InvoiceItem(
+      invoiceId: 0, // Will be set by database
+      productName: product.name,
+      hsnCode: product.details,
+      quantity: product.qty,
+      rate: product.rate,
+      gstPercent: product.gstPercent,
+    )).toList();
+
+    await InvoiceDatabase.saveCompleteInvoice(invoice, invoiceItems);
+  } catch (e) {
+    // Log error but don't stop PDF generation
+    debugPrint('Error saving invoice to database: $e');
+  }
 
   final logo = logoNotifier.value != null ? pw.MemoryImage(logoNotifier.value!) : null;
 

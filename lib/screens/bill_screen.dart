@@ -5,6 +5,7 @@ import '../models/product.dart';
 import '../services/pdf_service.dart';
 import '../globals.dart';
 import 'settings_screen.dart';
+import 'invoice_history_screen.dart';
 
 class BillScreen extends StatefulWidget {
   const BillScreen({super.key});
@@ -72,6 +73,16 @@ class _BillScreenState extends State<BillScreen> {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Invoice History',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const InvoiceHistoryScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
